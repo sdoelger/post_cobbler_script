@@ -1,0 +1,188 @@
+    #! /bin/bash
+
+###copy and paste into file then chmod 555
+
+clear
+sleep 2
+echo "################################################################################"
+echo "############    Yum: Installing Core, Base, Development Tools		   ###########"
+echo "################################################################################"
+
+/usr/bin/yum -y groupinstall Core Base 'Development Tools'
+
+echo "################################################################################"
+echo "############                   Yum: Updating System                  ###########"
+echo "################################################################################"
+
+/usr/bin/yum -y update
+
+echo "################################################################################"
+echo "############    Yum: Installing lockdev, wget, man, vsftpd, ntp, ntpdate ###########"
+echo "################################################################################"
+
+/usr/bin/yum -y install lockdev wget man vsftpd ntp ntpdate
+
+echo "################################################################################"
+echo "############   Yum: Installing ftp, nmap, telnet, libg, gpm, locate  ###########"
+echo "################################################################################"
+
+/usr/bin/yum -y install telnet ftp nmap libg2c.so.0 gpm locate
+
+echo "################################################################################"
+echo "############       		Yum: Installing epel-release       ###########"
+echo "################################################################################"
+
+/usr/bin/yum -y install epel-release
+
+echo "################################################################################"
+echo "############                     YUM:  Installing SNMP               ###########"
+echo "################################################################################"
+
+yum -y install net-snmp net-snmp-utils
+
+echo "################################################################################"
+echo "############                      Installing teqc                    ###########"
+echo "################################################################################"
+
+wget http://www.unavco.org/software/data-processing/teqc/development/teqc_Lx86_32d.zip
+unzip teqc_Lx86_32d.zip
+#tar xf teqc_Lx86_32s.tar
+mv teqc /usr/local/sbin/.
+rm teqc_Lx86_32d.zip
+
+echo "################################################################################"
+echo "############                     Installing uucp                     ###########"
+echo "################################################################################"
+
+#wget ftp://rpmfind.net/linux/centos/5.11/os/i386/CentOS/uucp-1.07-12.i386.rpm
+#rpm -i uucp-1.07-12.i386.rpm
+#mv uucp-1.07-12.i386.rpm /usr/local/src/.
+/usr/bin/yum install -y uucp
+usermod -a -G dialout gpsops
+usermod -a -G uucp gpsops
+
+echo "################################################################################"
+echo "############                    Installing apcupsd                   ###########"
+echo "################################################################################"
+
+cd /usr/local/src
+wget http://sourceforge.net/projects/apcupsd/files/apcupsd%20-%20Stable/3.14.13/apcupsd-3.14.13.tar.gz
+gunzip apcupsd-3.14.13.tar.gz
+tar xf apcupsd-3.14.13.tar
+
+cd apcupsd-3.14.13
+./configure --enable-apcsmart --with-upstype=apcsmart --with-upscable=smart --with-serial-dev=/dev/ttyS0 --with-nis-port=3551 -with-nisip=127.0.0.1 --enable-usb
+make
+make install
+make clean
+cd ..
+
+#echo "################################################################################"
+#echo "############                 last changes to rc.local                ###########"
+#echo "################################################################################"
+
+sed -i '/HUP/s/$/ $(cat \/var\/run\/syslogd.pid)/' /etc/rc.local
+
+
+#echo "################################################################################"
+#echo "############                 sed: Modifying grub.conf                ###########"
+#echo "################################################################################"
+
+n=16
+sed -i "${n} s/$/ elevator=noop rootflags=data=writeback/" /etc/grub.conf
+#sed -i '/kernel/s/$/ elevator=noop rootflags=data=writeback/' /etc/grub.conf
+
+
+echo "################################################################################"
+echo "############                 sed: Modifying ntp.conf                ###########"
+echo "################################################################################"
+
+echo " " >> /etc/ntp.conf
+echo "server 127.127.1.0 #local clock" >> /etc/ntp.conf
+echo "fudge 127.127.1.0 stratum 10" >> /etc/ntp.conf
+
+echo "################################################################################"
+echo "############              chkconfig: Modifying services              ###########"
+echo "################################################################################"
+
+service readahead_later stop
+service ip6tables stop
+service hplip stop
+service irqbalance stop
+service iscsi stop
+service iscsid stop
+service kudzu stop
+service microcode_ctl stop
+service restorecond stop
+service cpuspeed stop
+service sysstat stop
+service abrt-ccpp stop
+service abrt-oops stop
+service abrtd stop
+service kdump stop
+service messagebus stop
+service mdmonitor stop
+service cpuspeed stop
+service gpm stop
+service haldaemon stop
+service apcupsd start
+chkconfig --del haldaemon
+chkconfig --del postfix
+chkconfig --del ip6tables
+chkconfig --del mdmonitor
+chkconfig --del cpuspeed
+chkconfig --del messagebus
+chkconfig --del kdump
+chkconfig --del abrt-ccpp
+chkconfig --del abrt-oops
+chkconfig --del abrtd
+chkconfig --del sysstat
+chkconfig --del iscsi
+chkconfig --del iscsid
+chkconfig --del kudzu
+chkconfig --del microcode_ctl
+chkconfig --del restorecond
+chkconfig --del gpm
+chkconfig --del readahead_later
+chkconfig --del ip6tables
+chkconfig ntpd on
+chkconfig --add apcupsd
+chkconfig apcupsd on
+
+echo "################################################################################"
+echo "############              Other SNMP processes                       ###########"
+echo "################################################################################"
+
+chkconfig snmpd on
+/etc/init.d/snmpd start
+
+mv /etc/snmp/snmpd.conf /etc/snmp/snmpd.conf.orig
+touch /etc/snmp/snmpd.conf
+
+echo "#agentaddress" >> /etc/snmp/snmpd.conf
+echo "view    systemview    included     .1.3.6.1.2.1.1" >> /etc/snmp/snmpd.conf
+echo "view    systemview    included     .1.3.6.1.2.1.25.1.1" >> /etc/snmp/snmpd.conf
+echo "com2sec local         127.0.0.1     UNAv_2014" >> /etc/snmp/snmpd.conf
+echo "com2sec boulder       69.44.86.0/23    UNAv_2014" >> /etc/snmp/snmpd.conf
+echo "group   MyROGroup     v2c           local" >> /etc/snmp/snmpd.conf
+echo "group   MyROGroup     v2c           boulder" >> /etc/snmp/snmpd.conf
+echo "view    all           included      .1            80" >> /etc/snmp/snmpd.conf
+echo "access  MyROGroup     ""    any     noauth    exact  all   none none" >> /etc/snmp/snmpd.conf
+echo "syslocation Unknown (edit /etc/snmp/snmpd.conf)" >> /etc/snmp/snmpd.conf
+echo "syscontact Root <root@localhost> (configure /etc/snmp/snmp.local.conf)" >> /etc/snmp/snmpd.conf
+echo "dontLogTCPWrappersConnects yes" >> /etc/snmp/snmpd.conf
+echo "includeAllDisks 10%" >> /etc/snmp/snmpd.conf
+echo "disk /" >> /etc/snmp/snmpd.conf
+echo "disk /boot" >> /etc/snmp/snmpd.conf
+
+echo " " >> /etc/sysconfig/iptables
+echo "# SNMP Monitoring" >> /etc/sysconfig/iptables
+echo "-A INPUT -p udp -m udp -m state --state NEW -s 69.44.86.2 --dport 161 -j ACCEPT" >> /etc/sysconfig/iptables
+echo " " >> /etc/sysconfig/iptables
+
+service iptables restart
+
+echo "snmpd: localhost.localdomain, 69.44.86.2" >> /etc/hosts.allow
+
+
+
